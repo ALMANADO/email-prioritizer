@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Email Prioritizer — Level 1</title>
+<title>Email Prioritizer — Level 2</title>
 <script src="./msal-browser.min.js"></script>
 <style>
   :root {
@@ -79,12 +79,74 @@
   .subject { font-size: 14px; margin-bottom: 4px; }
   .preview { font-size: 13px; color: var(--muted); line-height: 1.4; }
   #count { font-size: 13px; color: var(--muted); margin: 18px 0 4px; }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .tag-high { background: #fdeceb; color: #b3261e; }
+  .tag-medium { background: #fff4e0; color: #9a6300; }
+  .tag-low { background: #eef2fd; color: #2b5fd9; }
+
+  .reason {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .settings {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .settings label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .settings textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    resize: vertical;
+    min-height: 44px;
+  }
+  .settings .hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .settings-toggle {
+    background: transparent;
+    color: var(--accent);
+    border: none;
+    font-size: 12px;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Email Prioritizer — Level 1</h1>
-  <p class="sub">Step 1: sign in and pull your inbox. No ranking yet — just proving the connection works.</p>
+  <h1>Email Prioritizer — Level 2</h1>
+  <p class="sub">Ranked by sender, keywords, and time-sensitivity — highest priority first.</p>
 
   <div id="userbar">
     <span id="userlabel"></span>
@@ -93,6 +155,12 @@
 
   <button id="signInBtn">Sign in with Microsoft</button>
   <div id="status"></div>
+
+  <div class="settings" id="settingsBox" style="display:none;">
+    <label for="keywordInput">Urgency keywords (comma-separated, edit anytime)</label>
+    <textarea id="keywordInput"></textarea>
+    <div class="hint">Matched against subject + preview text. <button class="settings-toggle" id="reRankBtn">Apply & re-rank</button></div>
+  </div>
 
   <div id="count"></div>
   <div class="email-list" id="emailList"></div>
@@ -125,6 +193,15 @@
   const userlabel = document.getElementById("userlabel");
   const countEl = document.getElementById("count");
   const emailListEl = document.getElementById("emailList");
+  const settingsBox = document.getElementById("settingsBox");
+  const keywordInput = document.getElementById("keywordInput");
+  const reRankBtn = document.getElementById("reRankBtn");
+
+  const DEFAULT_KEYWORDS = "urgent, asap, action needed, action required, deadline, due today, due by, respond by, immediately, please review, time sensitive, escalation, follow up, reminder";
+  keywordInput.value = DEFAULT_KEYWORDS;
+
+  let currentAccount = null;
+  let currentEmails = []; // raw emails from last fetch, so we can re-rank without re-fetching
 
   function setStatus(msg, isError) {
     statusEl.textContent = msg || "";
@@ -148,16 +225,21 @@
   signOutBtn.addEventListener("click", () => {
     msalInstance.logoutPopup();
     userbar.style.display = "none";
+    settingsBox.style.display = "none";
     signInBtn.style.display = "inline-block";
     signInBtn.disabled = false;
     emailListEl.innerHTML = "";
     countEl.textContent = "";
+    currentEmails = [];
+    currentAccount = null;
     setStatus("");
   });
 
   function onSignedIn(account) {
+    currentAccount = account;
     signInBtn.style.display = "none";
     userbar.style.display = "flex";
+    settingsBox.style.display = "block";
     userlabel.textContent = account.username;
     setStatus("Signed in. Fetching inbox...");
     fetchEmails(account);
@@ -185,32 +267,110 @@
       }
 
       const data = await response.json();
-      renderEmails(data.value);
+      currentEmails = data.value;
+      renderRanked();
       setStatus("");
     } catch (err) {
       setStatus("Could not fetch emails: " + err.message, true);
     }
   }
 
-  // ---- 4. Render (raw list, no ranking yet) ----
-  function renderEmails(emails) {
-    countEl.textContent = emails.length + " most recent emails";
+  // ---- 4. Ranking logic ----
+  function getKeywordList() {
+    return keywordInput.value
+      .split(",")
+      .map(k => k.trim().toLowerCase())
+      .filter(k => k.length > 0);
+  }
+
+  function scoreEmail(email, myDomain, keywords) {
+    let score = 0;
+    const reasons = [];
+
+    // Signal 1: sender domain match
+    const senderEmail = email.from?.emailAddress?.address || "";
+    const senderDomain = senderEmail.split("@")[1]?.toLowerCase();
+    if (senderDomain && myDomain && senderDomain === myDomain) {
+      score += 30;
+      reasons.push("Same domain as you");
+    }
+
+    // Signal 2: keyword match in subject + preview
+    const haystack = ((email.subject || "") + " " + (email.bodyPreview || "")).toLowerCase();
+    const matchedKeywords = keywords.filter(k => haystack.includes(k));
+    if (matchedKeywords.length > 0) {
+      score += Math.min(matchedKeywords.length * 15, 40); // cap contribution
+      reasons.push(`Contains "${matchedKeywords[0]}"`);
+    }
+
+    // Signal 3: recency (decays over 7 days)
+    const receivedDate = new Date(email.receivedDateTime);
+    const hoursAgo = (Date.now() - receivedDate.getTime()) / (1000 * 60 * 60);
+    if (hoursAgo <= 24) {
+      score += 20;
+      reasons.push("Received in the last 24h");
+    } else if (hoursAgo <= 72) {
+      score += 10;
+    } else if (hoursAgo <= 168) {
+      score += 3;
+    }
+
+    // Signal 4: simple date-mention detection (today/tomorrow/explicit dates)
+    const dateFlagPattern = /\b(today|tomorrow|tonight|this (morning|afternoon|evening))\b|\b\d{1,2}(st|nd|rd|th)?[\/\-\s](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+    if (dateFlagPattern.test(email.subject || "") || dateFlagPattern.test(email.bodyPreview || "")) {
+      score += 15;
+      reasons.push("Mentions a near-term date");
+    }
+
+    return { score, reasons };
+  }
+
+  function scoreToTag(score) {
+    if (score >= 45) return { label: "High", cls: "tag-high" };
+    if (score >= 20) return { label: "Medium", cls: "tag-medium" };
+    return { label: "Low", cls: "tag-low" };
+  }
+
+  function renderRanked() {
+    const myDomain = (currentAccount?.username || "").split("@")[1]?.toLowerCase();
+    const keywords = getKeywordList();
+
+    const scored = currentEmails.map(email => {
+      const { score, reasons } = scoreEmail(email, myDomain, keywords);
+      return { email, score, reasons };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    renderEmails(scored);
+  }
+
+  reRankBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    renderRanked();
+  });
+
+  // ---- 5. Render (ranked, with tag + reason) ----
+  function renderEmails(scoredItems) {
+    countEl.textContent = scoredItems.length + " emails, ranked by priority";
     emailListEl.innerHTML = "";
 
-    emails.forEach(email => {
+    scoredItems.forEach(({ email, score, reasons }) => {
       const card = document.createElement("div");
       card.className = "email-card";
 
       const fromName = email.from?.emailAddress?.name || "Unknown sender";
       const dateStr = new Date(email.receivedDateTime).toLocaleString();
+      const tag = scoreToTag(score);
+      const reasonText = reasons.length > 0 ? reasons.join(" • ") : "No strong priority signals";
 
       card.innerHTML = `
         <div class="email-top">
-          <span class="from">${escapeHtml(fromName)}</span>
+          <span><span class="tag ${tag.cls}">${tag.label}</span><span class="from">${escapeHtml(fromName)}</span></span>
           <span class="date">${dateStr}</span>
         </div>
         <div class="subject">${escapeHtml(email.subject || "(no subject)")}</div>
         <div class="preview">${escapeHtml(email.bodyPreview || "")}</div>
+        <div class="reason">${escapeHtml(reasonText)}</div>
       `;
       emailListEl.appendChild(card);
     });
