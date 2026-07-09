@@ -184,10 +184,15 @@
 </div>
 
 <script>
+  console.log("almanado-debug: script tag reached, before Office.onReady");
+
   // Wait for Office to be ready before touching MSAL/UI, as required inside a task pane.
-  Office.onReady(() => {
+  Office.onReady((info) => {
+    console.log("almanado-debug: Office.onReady FIRED", info);
     initApp();
   });
+
+  console.log("almanado-debug: Office.onReady call registered, waiting for callback");
 
   function initApp() {
     // ---- 1. Configuration ----
