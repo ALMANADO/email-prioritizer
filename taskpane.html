@@ -157,7 +157,7 @@
 
   function initApp() {
     // ---- 1. Configuration ----
-    const GEMINI_API_KEY = "AQ.Ab8RN6L-sLHPZ0OibcnOxbRxz1PpVEI_LPmpLv2SSKI29YF4Nw";
+    const GEMINI_API_KEY = "__GEMINI_API_KEY__";
     const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
     const msalConfig = {
@@ -169,7 +169,7 @@
       cache: { cacheLocation: "sessionStorage" }
     };
 
-    const loginRequest = { scopes: ["User.Read", "Mail.ReadWrite"] };
+    const loginRequest = { scopes: ["User.Read", "Mail.ReadWrite", "MailboxSettings.ReadWrite"] };
     const msalInstance = new msal.PublicClientApplication(msalConfig);
 
     const signInBtn   = document.getElementById("signInBtn");
@@ -331,10 +331,10 @@ ${emailList}`;
       Low:    "Priority: Low"
     };
     const CATEGORY_COLORS = {
-      "Priority: High":   "preset1",
-      "Priority: Medium": "preset5",
-      "Priority: Low":    "preset8"
-    };
+  "Priority: High":   "preset0",
+  "Priority: Medium": "preset3",
+  "Priority: Low":    "preset7"
+};
 
     async function ensureCategoriesExist(accessToken) {
       try {
