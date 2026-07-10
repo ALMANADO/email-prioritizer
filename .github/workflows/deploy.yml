@@ -57,13 +57,10 @@ jobs:
           placeholder = "__GEMINI_API_KEY__"
           key = os.environ["GEMINI_API_KEY"]
 
-          placeholder_count = text.count(placeholder)
-          if placeholder_count != 1:
-              raise SystemExit(
-                  f"Expected exactly one Gemini placeholder, found {placeholder_count}"
-              )
+          if placeholder not in text:
+              raise SystemExit("Placeholder __GEMINI_API_KEY__ not found in taskpane.html")
 
-          text = text.replace(placeholder, key, 1)
+          text = text.replace(placeholder, key)
           path.write_text(text, encoding="utf-8")
           PY
 
