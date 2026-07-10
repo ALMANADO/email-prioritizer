@@ -24,12 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare static site and inject Gemini key
+      - name: Prepare static site and inject GroqCloud key
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "GEMINI_API_KEY secret is missing"
+          set -euo pipefail
+
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "GROQ_API_KEY secret is missing"
             exit 1
           fi
 
@@ -48,37 +50,36 @@ jobs:
 
           touch dist/.nojekyll
 
-                    python3 - <<'PY'
+          python3 - <<'PY'
           import json
           import os
           from pathlib import Path
 
           path = Path("dist/taskpane.html")
           text = path.read_text(encoding="utf-8")
-          key = os.environ["GEMINI_API_KEY"]
+          key = os.environ["GROQ_API_KEY"]
+          target = 'const GROQ_API_KEY = "__GROQ_API_KEY__";'
 
-          target = 'const GEMINI_API_KEY = "__GEMINI_API_KEY__";'
-
-          if text.count(target) != 1:
+          count = text.count(target)
+          if count != 1:
               raise SystemExit(
-                  f"Expected exactly one Gemini key assignment, found {text.count(target)}"
+                  f"Expected exactly one Groq key assignment, found {count}"
               )
 
-          replacement = f"const GEMINI_API_KEY = {json.dumps(key)};"
+          replacement = f"const GROQ_API_KEY = {json.dumps(key)};"
           text = text.replace(target, replacement, 1)
-
           path.write_text(text, encoding="utf-8")
 
-          print("Gemini key injected into taskpane.html successfully")
+          print("GroqCloud key injected into taskpane.html successfully")
           PY
-          
-          if grep -q "__GEMINI_API_KEY__" dist/taskpane.html; then
-            echo "Gemini key placeholder was not replaced"
+
+          if grep -q "__GROQ_API_KEY__" dist/taskpane.html; then
+            echo "GroqCloud key placeholder was not replaced"
             exit 1
           fi
 
-          if ! grep -q "generativelanguage.googleapis.com" dist/taskpane.html; then
-            echo "Gemini integration code is missing from deployed taskpane.html"
+          if ! grep -q "api.groq.com/openai/v1/chat/completions" dist/taskpane.html; then
+            echo "GroqCloud integration code is missing from deployed taskpane.html"
             exit 1
           fi
 
