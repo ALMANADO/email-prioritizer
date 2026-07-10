@@ -48,22 +48,30 @@ jobs:
 
           touch dist/.nojekyll
 
-          python3 - <<'PY'
+                    python3 - <<'PY'
+          import json
           import os
           from pathlib import Path
 
           path = Path("dist/taskpane.html")
           text = path.read_text(encoding="utf-8")
-          placeholder = "__GEMINI_API_KEY__"
           key = os.environ["GEMINI_API_KEY"]
 
-          if placeholder not in text:
-              raise SystemExit("Placeholder __GEMINI_API_KEY__ not found in taskpane.html")
+          target = 'const GEMINI_API_KEY = "__GEMINI_API_KEY__";'
 
-          text = text.replace(placeholder, key)
+          if text.count(target) != 1:
+              raise SystemExit(
+                  f"Expected exactly one Gemini key assignment, found {text.count(target)}"
+              )
+
+          replacement = f"const GEMINI_API_KEY = {json.dumps(key)};"
+          text = text.replace(target, replacement, 1)
+
           path.write_text(text, encoding="utf-8")
-          PY
 
+          print("Gemini key injected into taskpane.html successfully")
+          PY
+          
           if grep -q "__GEMINI_API_KEY__" dist/taskpane.html; then
             echo "Gemini key placeholder was not replaced"
             exit 1
