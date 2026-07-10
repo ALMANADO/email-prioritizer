@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare static site
+      - name: Prepare static site and inject Gemini key
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
@@ -54,15 +54,25 @@ jobs:
 
           path = Path("dist/taskpane.html")
           text = path.read_text(encoding="utf-8")
-
           placeholder = "__GEMINI_API_KEY__"
           key = os.environ["GEMINI_API_KEY"]
 
           if placeholder not in text:
               raise SystemExit("Placeholder __GEMINI_API_KEY__ not found in taskpane.html")
 
-          path.write_text(text.replace(placeholder, key), encoding="utf-8")
+          text = text.replace(placeholder, key)
+          path.write_text(text, encoding="utf-8")
           PY
+
+          if grep -q "__GEMINI_API_KEY__" dist/taskpane.html; then
+            echo "Gemini key placeholder was not replaced"
+            exit 1
+          fi
+
+          if ! grep -q "generativelanguage.googleapis.com" dist/taskpane.html; then
+            echo "Gemini integration code is missing from deployed taskpane.html"
+            exit 1
+          fi
 
       - uses: actions/configure-pages@v4
 
