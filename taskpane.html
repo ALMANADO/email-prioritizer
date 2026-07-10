@@ -174,14 +174,14 @@
   function initApp() {
     // ---- 0. Gemini configuration ----
     // Developer-owned key. End users should NOT paste any Gemini key in the add-in.
-    const GEMINI_API_KEY = "__GEMINI_API_KEY__"; // Replaced by GitHub Actions during deployment
+    const GEMINI_API_KEY = "__GEMINI_API_KEY__";
     const GEMINI_MODEL = "gemini-2.5-flash";
 
-    const hasConfiguredGeminiKey =
-      GEMINI_API_KEY &&
-      GEMINI_API_KEY !== "__GEMINI_API_KEY__" &&
-      !GEMINI_API_KEY.includes("PASTE_") &&
-      GEMINI_API_KEY.length > 20;
+  const hasConfiguredGeminiKey =
+    typeof GEMINI_API_KEY === "string" &&
+    GEMINI_API_KEY.length > 20 &&
+    !GEMINI_API_KEY.startsWith("__") &&
+    !GEMINI_API_KEY.includes("PASTE_");
 
     // ---- 1. Microsoft configuration ----
     const msalConfig = {
